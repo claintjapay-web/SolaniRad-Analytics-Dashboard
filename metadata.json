@@ -1,0 +1,5 @@
+{
+  "name": "SolaniRad Analytic Dashboard",
+  "description": "Real-time environmental monitoring dashboard simulating gas sensors with live data visualization.",
+  "requestFramePermissions": []
+}
