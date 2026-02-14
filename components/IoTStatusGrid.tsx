@@ -110,7 +110,7 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
           {onReset && (
             <button 
               onClick={onReset}
-              className="group flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 rounded-xl transition-all duration-300"
+              className="group flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/50 rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_rgba(239,68,68,0.2)] active:scale-95 active:bg-red-500/30"
             >
               <svg className="w-4 h-4 text-red-500 group-hover:rotate-180 transition-transform duration-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

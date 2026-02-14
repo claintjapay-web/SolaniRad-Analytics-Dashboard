@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue } from 'firebase/database';
+import { getDatabase, ref, onValue, set } from 'firebase/database';
 import { Header } from './components/Header';
 import { KpiCard } from './components/KpiCard';
 import { GasConcentrationPie } from './components/Charts/GasConcentrationPie';
@@ -119,7 +119,20 @@ const App: React.FC = () => {
 
   // Function to handle ESP32 Reset Link
   const handleReset = () => {
-    if (window.confirm("CONFIRM REBOOT: Initiate ESP32 System Reset Sequence?")) {
+    const confirmed = window.confirm(
+      "CONFIRM REBOOT: Initiate ESP32 System Reset Sequence?"
+    );
+
+    if (confirmed) {
+      // Method 1: Write to Firebase (Remote Trigger)
+      // The ESP32 should listen to changes on 'iot_system/command'
+      set(ref(database, 'iot_system/command'), 'RESET')
+        .then(() => {
+           console.log("Reset command synced to cloud.");
+        })
+        .catch(err => console.error("Cloud sync failed:", err));
+
+      // Method 2: Open Direct Link (Local AP Mode) in New Tab
       window.open('http://192.168.4.1/reset', '_blank');
     }
   };
