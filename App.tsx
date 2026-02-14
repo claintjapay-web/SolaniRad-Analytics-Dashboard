@@ -117,23 +117,23 @@ const App: React.FC = () => {
 
   const safetyStatuses = getSafetyStatus(data);
 
-  // Function to handle ESP32 Reset Link
+  // FUNCTIONAL REQUIREMENT 1 & 2: Dashboard Click Logic
   const handleReset = () => {
     const confirmed = window.confirm(
       "CONFIRM REBOOT: Initiate ESP32 System Reset Sequence?"
     );
 
     if (confirmed) {
-      // Method 1: Write to Firebase (Remote Trigger)
-      // The ESP32 should listen to changes on 'iot_system/command'
-      set(ref(database, 'iot_system/command'), 'RESET')
+      // Write to specific path: iot_system/control/reboot
+      // Sending 'true' triggers the listener on the ESP32
+      set(ref(database, 'iot_system/control/reboot'), true)
         .then(() => {
-           console.log("Reset command synced to cloud.");
+           alert("Reboot Signal Sent. The ESP32 will restart and reset the signal.");
         })
-        .catch(err => console.error("Cloud sync failed:", err));
-
-      // Method 2: Open Direct Link (Local AP Mode) in New Tab
-      window.open('http://192.168.4.1/reset', '_blank');
+        .catch(err => {
+            console.error("Cloud sync failed:", err);
+            alert("Error sending reboot signal. Check connection.");
+        });
     }
   };
 
