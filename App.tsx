@@ -159,7 +159,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <KpiCard title="NH₃ Level" subtitle="Ammonia" value={data.nh3} unit="ppm" color={GAS_COLORS.nh3} />
           <KpiCard title="CO₂ Level" subtitle="Carbon Dioxide" value={data.co2} unit="ppm" color={GAS_COLORS.co2} />
-          <KpiCard title="NOx/AQI Level" subtitle="Nitrogen Oxides" value={data.nox} unit="ppb" color={GAS_COLORS.nox} />
+          <KpiCard title="VOC level" subtitle="Nitrogen Oxides" value={data.nox} unit="ppb" color={GAS_COLORS.nox} />
           <KpiCard title="Load Weight" subtitle="Total Load" value={data.weight} unit="kg" color={GAS_COLORS.so2} />
           <KpiCard title="System Temp" subtitle="Internal" value={data.temperature} unit="°C" color={GAS_COLORS.env} />
         </div>
