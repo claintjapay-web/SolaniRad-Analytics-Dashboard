@@ -27,7 +27,8 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+// Initialize Realtime Database with explicit URL for asia-southeast1 region
+const database = getDatabase(app, "https://solanirad-analytics-dashboard-default-rtdb.asia-southeast1.firebasedatabase.app/");
 
 const App: React.FC = () => {
   // Analytic Data State (for charts)
@@ -112,6 +113,8 @@ const App: React.FC = () => {
           const newHistory = [...prev, newReading];
           return newHistory.slice(-20); 
         });
+      } else {
+        console.log("Connected to Firebase, but 'iot_system' node is empty or missing.");
       }
     }, (error) => {
       console.error("Firebase Read Error:", error);
