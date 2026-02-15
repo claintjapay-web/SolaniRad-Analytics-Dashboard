@@ -56,15 +56,15 @@ export const getSafetyStatus = (reading: SensorReading): SafetyStatus[] => {
       color: GAS_COLORS.co2 
     },
     { 
-      gas: 'NOx', 
+      gas: 'VOC', 
       value: reading.nox, 
       status: getStatus(reading.nox, 80, 120),
       color: GAS_COLORS.nox 
     },
     { 
-      gas: 'SO₂', 
-      value: reading.so2, 
-      status: getStatus(reading.so2, 20, 40),
+      gas: 'Temp', 
+      value: reading.temperature, 
+      status: getStatus(reading.temperature, 30, 38),
       color: GAS_COLORS.so2 
     },
     { 

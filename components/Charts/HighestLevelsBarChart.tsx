@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { SensorReading, GAS_COLORS } from '../../types';
 
 interface Props {
@@ -10,8 +10,7 @@ export const HighestLevelsBarChart: React.FC<Props> = ({ data }) => {
   const chartData = [
     { name: 'NH₃', value: data.nh3, color: GAS_COLORS.nh3 },
     { name: 'CO₂', value: data.co2 / 20, color: GAS_COLORS.co2 },
-    { name: 'NOx', value: data.nox, color: GAS_COLORS.nox },
-    { name: 'SO₂', value: data.so2, color: GAS_COLORS.so2 },
+    { name: 'VOC', value: data.nox, color: GAS_COLORS.nox },
   ].sort((a, b) => b.value - a.value);
 
   return (

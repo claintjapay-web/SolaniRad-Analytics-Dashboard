@@ -10,8 +10,7 @@ export const GasConcentrationPie: React.FC<Props> = ({ data }) => {
   const chartData = [
     { name: 'NH₃', value: data.nh3, color: GAS_COLORS.nh3 },
     { name: 'CO₂', value: data.co2 / 10, color: GAS_COLORS.co2 },
-    { name: 'NOx', value: data.nox, color: GAS_COLORS.nox },
-    { name: 'SO₂', value: data.so2, color: GAS_COLORS.so2 },
+    { name: 'VOC', value: data.nox, color: GAS_COLORS.nox },
   ];
 
   return (

@@ -6,12 +6,12 @@ interface Props {
   history: SensorReading[];
 }
 
-export const GasLevelsBarChart: React.FC<Props> = ({ history }) => {
+export const EnvLevelsBarChart: React.FC<Props> = ({ history }) => {
   return (
-    <div className="w-full h-full min-h-[250px] bg-[#1e293b]/40 backdrop-blur-md rounded-2xl border border-white/5 p-6 flex flex-col shadow-lg">
+    <div className="w-full h-full min-h-[200px] bg-[#1e293b]/40 backdrop-blur-md rounded-2xl border border-white/5 p-6 flex flex-col shadow-lg">
       <h3 className="text-slate-200 font-bold text-xs uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-        <span className="w-1 h-4 bg-purple-500 rounded-full shadow-[0_0_10px_#a855f7]"></span>
-        Gas Levels Over Time
+        <span className="w-1 h-4 bg-teal-500 rounded-full shadow-[0_0_10px_#14b8a6]"></span>
+        Environment History
       </h3>
       <div className="flex-1 w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -21,17 +21,13 @@ export const GasLevelsBarChart: React.FC<Props> = ({ history }) => {
             barCategoryGap="20%"
           >
             <defs>
-              <linearGradient id="gradNh3" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={GAS_COLORS.nh3} stopOpacity={0.8}/>
-                <stop offset="95%" stopColor={GAS_COLORS.nh3} stopOpacity={0.2}/>
+              <linearGradient id="gradTemp" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={GAS_COLORS.env} stopOpacity={0.8}/>
+                <stop offset="95%" stopColor={GAS_COLORS.env} stopOpacity={0.2}/>
               </linearGradient>
-              <linearGradient id="gradCo2" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={GAS_COLORS.co2} stopOpacity={0.8}/>
-                <stop offset="95%" stopColor={GAS_COLORS.co2} stopOpacity={0.2}/>
-              </linearGradient>
-              <linearGradient id="gradNox" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={GAS_COLORS.nox} stopOpacity={0.8}/>
-                <stop offset="95%" stopColor={GAS_COLORS.nox} stopOpacity={0.2}/>
+              <linearGradient id="gradHum" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#a855f7" stopOpacity={0.8}/>
+                <stop offset="95%" stopColor="#a855f7" stopOpacity={0.2}/>
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
@@ -69,9 +65,8 @@ export const GasLevelsBarChart: React.FC<Props> = ({ history }) => {
               wrapperStyle={{ paddingTop: '20px', fontSize: '11px', fontFamily: 'monospace' }} 
               iconType="circle"
             />
-            <Bar dataKey="nh3" name="NH₃" stackId="a" fill="url(#gradNh3)" radius={[0, 0, 0, 0]} />
-            <Bar dataKey="co2" name="CO₂ (x0.1)" stackId="a" fill="url(#gradCo2)" radius={[0, 0, 0, 0]} />
-            <Bar dataKey="nox" name="VOC" stackId="a" fill="url(#gradNox)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="temperature" name="Temp (°C)" fill="url(#gradTemp)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="humidity" name="Humidity (%)" fill="url(#gradHum)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -79,21 +79,86 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
   const redLedActive = uvcActive;   
   const greenLedActive = !uvcActive; 
 
-  // Battery Segment Logic
+  // Battery Segment & Color Logic
   const segments = 10;
   const filledSegments = Math.ceil((systemData.battery / 100) * segments);
+  const batteryLevel = systemData.battery;
   
+  // DETERMINE COLOR CONFIGURATION BASED ON PERCENTAGE
+  const getBatteryConfig = (level: number) => {
+    // 80-100% = Green
+    if (level >= 80) return {
+      text: 'text-emerald-500',
+      bg: 'bg-emerald-500',
+      shadow: 'shadow-[0_0_6px_#10b981]',
+      border: 'border-emerald-500/30'
+    };
+    // 50-79% = Yellow
+    if (level >= 50) return {
+      text: 'text-yellow-400',
+      bg: 'bg-yellow-400',
+      shadow: 'shadow-[0_0_6px_#facc15]',
+      border: 'border-yellow-500/30'
+    };
+    // 30-49% = Yellow Orange
+    if (level >= 30) return {
+      text: 'text-amber-500',
+      bg: 'bg-amber-500',
+      shadow: 'shadow-[0_0_6px_#f59e0b]',
+      border: 'border-amber-500/30'
+    };
+    // 20-29% = Red Orange
+    if (level >= 20) return {
+      text: 'text-orange-600',
+      bg: 'bg-orange-600',
+      shadow: 'shadow-[0_0_6px_#ea580c]',
+      border: 'border-orange-600/30'
+    };
+    // 1-19% = Red
+    return {
+      text: 'text-red-600',
+      bg: 'bg-red-600',
+      shadow: 'shadow-[0_0_6px_#dc2626]',
+      border: 'border-red-600/30'
+    };
+  };
+
+  const batConfig = getBatteryConfig(batteryLevel);
+  const isCritical = batteryLevel < 20; // Only pulse below 20%
+
+  const getBatteryStatusText = () => {
+    if (batteryLevel >= 98) return 'FULL CHG';
+    if (batteryLevel >= 80) return 'NOMINAL';
+    if (batteryLevel >= 50) return 'GOOD';
+    if (batteryLevel >= 30) return 'LOW PWR';
+    if (batteryLevel >= 20) return 'WARNING';
+    return 'CRITICAL';
+  };
+
   const getSegmentColor = (index: number) => {
-    if (index >= filledSegments) return 'bg-gray-800/50'; // Empty
-    if (systemData.battery < 30) return 'bg-red-500 shadow-[0_0_8px_#ef4444]';
-    if (systemData.battery < 60) return 'bg-yellow-500 shadow-[0_0_8px_#eab308]';
-    return 'bg-emerald-500 shadow-[0_0_8px_#10b981]';
+    // If segment is empty
+    if (index >= filledSegments) return 'bg-gray-800/30'; 
+    // Filled segment colors based on global level
+    return `${batConfig.bg} ${batConfig.shadow}`;
   };
 
   return (
     <div className="w-full bg-[#1e293b]/40 backdrop-blur-xl rounded-3xl border border-white/5 p-6 shadow-2xl relative overflow-hidden">
-      {/* Decorative Grid Background */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+      
+      {/* Enhanced Background: Plasma Border & Grid */}
+      <div className="absolute inset-0 pointer-events-none rounded-3xl overflow-hidden">
+          {/* 1. Plasma Border Animation (Masked to edges) */}
+          <div className="absolute inset-0 z-0 opacity-60 mix-blend-plus-lighter" 
+               style={{ maskImage: 'radial-gradient(ellipse at center, transparent 60%, black 100%)', WebkitMaskImage: 'radial-gradient(ellipse at center, transparent 60%, black 100%)' }}>
+              <div className="absolute -inset-[50%] animate-[spin_10s_linear_infinite] blur-[50px] opacity-70"
+                   style={{ background: 'conic-gradient(from 0deg, transparent 0deg, #10b981 60deg, transparent 120deg, transparent 200deg, #ef4444 260deg, transparent 360deg)' }} />
+              <div className="absolute -inset-[50%] animate-[spin_7s_linear_infinite_reverse] blur-[40px] opacity-70"
+                   style={{ background: 'conic-gradient(from 180deg, transparent 0deg, #ef4444 40deg, transparent 100deg, transparent 240deg, #10b981 300deg, transparent 360deg)' }} />
+          </div>
+
+          {/* 2. Original Grid (Retained) */}
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:24px_24px] opacity-80" />
+      </div>
 
       <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6 border-b border-white/5 pb-6">
         <div className="flex items-center gap-3">
@@ -121,20 +186,34 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
             </button>
           )}
 
-          {/* Futuristic Battery Widget */}
-          <div className="flex items-center gap-4 bg-black/40 px-6 py-3 rounded-full border border-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
-            <Icons.Battery />
-            <div className="flex gap-1.5">
+          {/* Enhanced Battery Widget with Dynamic Colors */}
+          <div className={`flex items-center gap-4 bg-black/40 px-5 py-2.5 rounded-2xl border transition-all duration-500 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)] ${batConfig.border} ${isCritical ? 'animate-pulse shadow-[inset_0_0_20px_rgba(220,38,38,0.2)]' : 'border-white/10'}`}>
+            
+            <div className={`transition-colors duration-300 ${batConfig.text}`}>
+               <Icons.Battery />
+            </div>
+
+            <div className="flex gap-1">
               {Array.from({ length: segments }).map((_, i) => (
                 <div 
                   key={i} 
-                  className={`w-2 h-5 rounded-[2px] transition-all duration-300 ${getSegmentColor(i)}`}
+                  className={`w-1.5 h-5 rounded-[1px] transition-all duration-300 ${getSegmentColor(i)}`}
                 />
               ))}
             </div>
-            <span className="text-sm font-mono font-bold text-white ml-2 border-l border-white/10 pl-4 tracking-wider">
-              {systemData.battery}%
-            </span>
+            
+            <div className="flex flex-col border-l border-white/10 pl-4 ml-1 min-w-[60px]">
+               <div className="flex items-baseline gap-0.5">
+                  <span className={`text-lg font-mono font-bold leading-none transition-colors duration-300 ${batConfig.text}`}>
+                      {systemData.battery}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-bold">%</span>
+               </div>
+               <span className={`text-[8px] font-bold uppercase tracking-widest leading-none mt-1 transition-colors duration-300 ${batConfig.text}`}>
+                  {getBatteryStatusText()}
+               </span>
+            </div>
+
           </div>
 
         </div>

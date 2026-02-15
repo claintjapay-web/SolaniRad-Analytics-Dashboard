@@ -1,74 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SolaniRad Analytic Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            gas: {
-              nh3: '#06b6d4', // Cyan
-              co2: '#3b82f6', // Blue
-              nox: '#f97316', // Orange
-              so2: '#ef4444', // Red
-              env: '#14b8a6', // Teal
-              bg: '#1e1b4b', // Deep Purple
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SolaniRad Analytic Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              gas: {
+                nh3: '#06b6d4', // Cyan
+                co2: '#3b82f6', // Blue
+                nox: '#f97316', // Orange
+                so2: '#ef4444', // Red
+                env: '#14b8a6', // Teal
+                bg: '#1e1b4b', // Deep Purple
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
             }
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
           }
         }
       }
-    }
-  </script>
-  <style>
-    /* Custom Scrollbar for the table */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 3px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.4);
-    }
-
-    /* Levitation Animation */
-    @keyframes float {
-
-      0%,
-      100% {
-        transform: translateY(0px);
+    </script>
+    <style>
+      /* Custom Scrollbar for the table */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.4);
+      }
+      
+      /* Levitation Animation */
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+      }
+      .animate-float {
+        animation: float 6s ease-in-out infinite;
       }
 
-      50% {
-        transform: translateY(-8px);
+      body {
+        background-color: #0f172a;
+        color: white;
       }
-    }
-
-    .animate-float {
-      animation: float 6s ease-in-out infinite;
-    }
-
-    body {
-      background-color: #0f172a;
-      color: white;
-    }
-  </style>
+    </style>
   <script type="importmap">
 {
   "imports": {
@@ -82,12 +70,10 @@
   }
 }
 </script>
-  <link rel="stylesheet" href="/index.css">
+<link rel="stylesheet" href="/index.css">
 </head>
-
-<body>
-  <div id="root"></div>
+  <body>
+    <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
-
 </html>
