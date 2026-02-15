@@ -1,8 +1,10 @@
 import React from 'react';
-import { IoTSystemState } from '../types';
+import { IoTSystemState, SensorHeartbeats } from '../types';
 
 interface Props {
   systemData: IoTSystemState;
+  heartbeats: SensorHeartbeats;
+  now: number;
   onReset?: () => void;
 }
 
@@ -68,24 +70,38 @@ const StatusCard = ({
   );
 };
 
-export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
-  // Logic: ESP32 Heartbeat
-  const currentTime = Math.floor(Date.now() / 1000);
-  const lastUpdate = systemData.esp32_last_update;
-  const isEspOnline = (currentTime - lastUpdate) <= 15 || systemData.esp32_status === true;
+export const IoTStatusGrid: React.FC<Props> = ({ systemData, heartbeats, now, onReset }) => {
+  // TIMEOUT THRESHOLD: 15 seconds
+  const TIMEOUT_MS = 15000;
+
+  // Determine Online Status Per Device
+  const isOnline = (lastSeen: number) => (now - lastSeen) < TIMEOUT_MS;
+
+  const espOnline = isOnline(heartbeats.esp32);
+  const mq137Online = isOnline(heartbeats.mq137);
+  const mq135Online = isOnline(heartbeats.mq135);
+  const scd41Online = isOnline(heartbeats.scd41);
+  const loadcellOnline = isOnline(heartbeats.loadcell);
+  const servoOnline = isOnline(heartbeats.servo);
+  const uvcOnline = isOnline(heartbeats.uvc);
 
   // Logic: UV-C and LEDs
-  const uvcActive = systemData.uvc;
+  // UV-C only active if connected AND boolean is true
+  const uvcActive = uvcOnline && systemData.uvc;
   const redLedActive = uvcActive;   
-  const greenLedActive = !uvcActive; 
+  const greenLedActive = !uvcActive && uvcOnline; // Ready if online but not running
 
   // Battery Segment & Color Logic
   const segments = 10;
-  const filledSegments = Math.ceil((systemData.battery / 100) * segments);
-  const batteryLevel = systemData.battery;
+  // Battery depends on ESP32 connection
+  const batteryLevel = espOnline ? systemData.battery : 0;
+  const filledSegments = Math.ceil((batteryLevel / 100) * segments);
   
   // DETERMINE COLOR CONFIGURATION BASED ON PERCENTAGE
   const getBatteryConfig = (level: number) => {
+    if (!espOnline) return {
+       text: 'text-gray-500', bg: 'bg-gray-700', shadow: 'shadow-none', border: 'border-gray-700/30'
+    };
     // 80-100% = Green
     if (level >= 80) return {
       text: 'text-emerald-500',
@@ -124,9 +140,10 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
   };
 
   const batConfig = getBatteryConfig(batteryLevel);
-  const isCritical = batteryLevel < 20; // Only pulse below 20%
+  const isCritical = espOnline && batteryLevel < 20;
 
   const getBatteryStatusText = () => {
+    if (!espOnline) return 'OFFLINE';
     if (batteryLevel >= 98) return 'FULL CHG';
     if (batteryLevel >= 80) return 'NOMINAL';
     if (batteryLevel >= 50) return 'GOOD';
@@ -136,6 +153,7 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
   };
 
   const getSegmentColor = (index: number) => {
+    if (!espOnline) return 'bg-gray-800/30';
     // If segment is empty
     if (index >= filledSegments) return 'bg-gray-800/30'; 
     // Filled segment colors based on global level
@@ -147,22 +165,24 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
       
       {/* Enhanced Background: Plasma Border & Grid */}
       <div className="absolute inset-0 pointer-events-none rounded-3xl overflow-hidden">
-          {/* 1. Plasma Border Animation (Masked to edges) */}
-          <div className="absolute inset-0 z-0 opacity-60 mix-blend-plus-lighter" 
-               style={{ maskImage: 'radial-gradient(ellipse at center, transparent 60%, black 100%)', WebkitMaskImage: 'radial-gradient(ellipse at center, transparent 60%, black 100%)' }}>
-              <div className="absolute -inset-[50%] animate-[spin_10s_linear_infinite] blur-[50px] opacity-70"
-                   style={{ background: 'conic-gradient(from 0deg, transparent 0deg, #10b981 60deg, transparent 120deg, transparent 200deg, #ef4444 260deg, transparent 360deg)' }} />
-              <div className="absolute -inset-[50%] animate-[spin_7s_linear_infinite_reverse] blur-[40px] opacity-70"
-                   style={{ background: 'conic-gradient(from 180deg, transparent 0deg, #ef4444 40deg, transparent 100deg, transparent 240deg, #10b981 300deg, transparent 360deg)' }} />
-          </div>
+          {/* Plasma only active when main MCU is online */}
+          {espOnline && (
+            <div className="absolute inset-0 z-0 opacity-60 mix-blend-plus-lighter" 
+                 style={{ maskImage: 'radial-gradient(ellipse at center, transparent 60%, black 100%)', WebkitMaskImage: 'radial-gradient(ellipse at center, transparent 60%, black 100%)' }}>
+                <div className="absolute -inset-[50%] animate-[spin_10s_linear_infinite] blur-[50px] opacity-70"
+                     style={{ background: 'conic-gradient(from 0deg, transparent 0deg, #10b981 60deg, transparent 120deg, transparent 200deg, #ef4444 260deg, transparent 360deg)' }} />
+                <div className="absolute -inset-[50%] animate-[spin_7s_linear_infinite_reverse] blur-[40px] opacity-70"
+                     style={{ background: 'conic-gradient(from 180deg, transparent 0deg, #ef4444 40deg, transparent 100deg, transparent 240deg, #10b981 300deg, transparent 360deg)' }} />
+            </div>
+          )}
 
-          {/* 2. Original Grid (Retained) */}
+          {/* Grid */}
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:24px_24px] opacity-80" />
       </div>
 
       <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6 border-b border-white/5 pb-6">
         <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${isEspOnline ? 'bg-green-500 shadow-[0_0_15px_#22c55e]' : 'bg-red-500 shadow-[0_0_15px_#ef4444]'} animate-pulse`} />
+            <div className={`w-3 h-3 rounded-full ${espOnline ? 'bg-green-500 shadow-[0_0_15px_#22c55e] animate-pulse' : 'bg-red-500 shadow-[0_0_15px_#ef4444]'}`} />
             <h3 className="text-white font-black text-xl uppercase tracking-[0.15em] drop-shadow-md">
             System Hardware
             </h3>
@@ -171,22 +191,27 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
         {/* Right Side Controls */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           
-          {/* Reset Button */}
+          {/* Reset Button - Only show/enable when online */}
           {onReset && (
             <button 
-              onClick={onReset}
-              className="group flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/50 rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_rgba(239,68,68,0.2)] active:scale-95 active:bg-red-500/30"
+              onClick={espOnline ? onReset : undefined}
+              disabled={!espOnline}
+              className={`group flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300
+                 ${espOnline 
+                    ? 'bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/50 hover:shadow-[0_0_15px_rgba(239,68,68,0.2)] cursor-pointer' 
+                    : 'bg-gray-800/50 border border-gray-700 cursor-not-allowed grayscale'
+                 }`}
             >
-              <svg className="w-4 h-4 text-red-500 group-hover:rotate-180 transition-transform duration-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className={`w-4 h-4 text-red-500 transition-transform duration-700 ${espOnline ? 'group-hover:rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span className="text-[10px] font-black text-red-400 uppercase tracking-widest group-hover:text-red-300">
+              <span className={`text-[10px] font-black uppercase tracking-widest ${espOnline ? 'text-red-400 group-hover:text-red-300' : 'text-gray-500'}`}>
                 Reboot System
               </span>
             </button>
           )}
 
-          {/* Enhanced Battery Widget with Dynamic Colors */}
+          {/* Battery Widget */}
           <div className={`flex items-center gap-4 bg-black/40 px-5 py-2.5 rounded-2xl border transition-all duration-500 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)] ${batConfig.border} ${isCritical ? 'animate-pulse shadow-[inset_0_0_20px_rgba(220,38,38,0.2)]' : 'border-white/10'}`}>
             
             <div className={`transition-colors duration-300 ${batConfig.text}`}>
@@ -205,7 +230,7 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
             <div className="flex flex-col border-l border-white/10 pl-4 ml-1 min-w-[60px]">
                <div className="flex items-baseline gap-0.5">
                   <span className={`text-lg font-mono font-bold leading-none transition-colors duration-300 ${batConfig.text}`}>
-                      {systemData.battery}
+                      {batteryLevel}
                   </span>
                   <span className="text-[10px] text-slate-500 font-bold">%</span>
                </div>
@@ -224,49 +249,53 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
         {/* ESP32 Controller */}
         <StatusCard 
           label="ESP32 MCU" 
-          status={isEspOnline ? 'ON' : 'OFF'} 
-          subtext={isEspOnline ? `Heartbeat: Active` : 'Signal Lost'}
+          status={espOnline ? 'ON' : 'OFF'} 
+          subtext={espOnline ? `Heartbeat: Active` : 'Signal Lost'}
           icon={Icons.Chip}
         />
 
-        {/* Gas Sensors */}
+        {/* Gas Sensors - Independent Online Checks */}
         <StatusCard 
           label="MQ-137 Array" 
-          status={systemData.mq137 > 0 ? 'ON' : 'OFF'} 
-          subtext={systemData.mq137 > 0 ? 'Data Streaming' : 'No Signal'}
+          status={mq137Online ? 'ON' : 'OFF'} 
+          subtext={mq137Online ? 'Data Streaming' : 'No Signal'}
           icon={Icons.Gas}
         />
         <StatusCard 
           label="MQ-135 Array" 
-          status={systemData.mq135 > 0 ? 'ON' : 'OFF'} 
-          subtext={systemData.mq135 > 0 ? 'Data Streaming' : 'No Signal'}
+          status={mq135Online ? 'ON' : 'OFF'} 
+          subtext={mq135Online ? 'Data Streaming' : 'No Signal'}
           icon={Icons.Gas}
         />
 
-        {/* Env Sensor */}
+        {/* Env Sensor - Independent Online Check */}
         <StatusCard 
           label="SCD41 Module" 
-          status={(systemData.scd41?.co2 > 0) ? 'ON' : 'OFF'} 
-          subtext="Env Monitoring"
+          status={scd41Online ? 'ON' : 'OFF'} 
+          subtext={scd41Online ? 'Env Monitoring' : 'Offline'}
           icon={Icons.Env}
         />
 
-        {/* Actuators */}
+        {/* Actuators - Servo state depends on connection + boolean state */}
         <StatusCard 
           label="Servo Mech" 
-          status={systemData.servo ? 'ON' : 'OFF'} 
-          subtext="Position Lock"
+          status={servoOnline && systemData.servo ? 'ON' : 'OFF'} 
+          subtext={servoOnline ? (systemData.servo ? 'Position Lock' : 'Idle / Inactive') : 'Offline'}
           icon={Icons.Servo}
         />
+        
+        {/* Load Cell - Independent Online Check */}
         <StatusCard 
           label="Load Cell" 
-          status={systemData.loadcell !== undefined ? 'ON' : 'OFF'} 
-          subtext="Calibrated"
+          status={loadcellOnline ? 'ON' : 'OFF'} 
+          subtext={loadcellOnline ? 'Calibrated' : 'Offline'}
           icon={Icons.Weight}
         />
 
         {/* Custom UV-C Control Panel */}
-        <div className="xl:col-span-2 bg-gradient-to-r from-slate-900/80 to-slate-800/80 rounded-xl border border-white/10 p-4 flex flex-row items-center justify-between gap-6 relative overflow-hidden group hover:border-purple-500/30 transition-colors duration-500">
+        <div className={`xl:col-span-2 bg-gradient-to-r rounded-xl border p-4 flex flex-row items-center justify-between gap-6 relative overflow-hidden group transition-colors duration-500
+            ${uvcOnline ? 'from-slate-900/80 to-slate-800/80 border-white/10 hover:border-purple-500/30' : 'from-slate-900/80 to-slate-800/80 border-white/5 opacity-60 grayscale'}`}>
+          
           {/* Background Glow */}
           {uvcActive && (
              <div className="absolute inset-0 bg-purple-500/10 mix-blend-overlay pointer-events-none animate-pulse" />
@@ -280,7 +309,7 @@ export const IoTStatusGrid: React.FC<Props> = ({ systemData, onReset }) => {
             <div>
               <h4 className="text-sm font-bold text-gray-100 uppercase tracking-wider">UV-C Sterilization</h4>
               <span className={`text-[10px] font-bold px-3 py-1 rounded-md border mt-1.5 inline-block tracking-widest ${uvcActive ? 'text-purple-300 border-purple-500/30 bg-purple-500/10 shadow-[0_0_10px_rgba(168,85,247,0.2)]' : 'text-gray-500 border-gray-700'}`}>
-                {uvcActive ? 'SEQUENCE ACTIVE' : 'STANDBY'}
+                {uvcOnline ? (uvcActive ? 'SEQUENCE ACTIVE' : 'STANDBY') : 'OFFLINE'}
               </span>
             </div>
           </div>

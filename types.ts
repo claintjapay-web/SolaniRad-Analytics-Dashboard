@@ -47,6 +47,16 @@ export interface IoTSystemState {
   battery: number;
 }
 
+export interface SensorHeartbeats {
+  esp32: number;
+  mq137: number;
+  mq135: number;
+  scd41: number;
+  loadcell: number;
+  servo: number;
+  uvc: number;
+}
+
 export const GAS_COLORS = {
   nh3: '#06b6d4',
   co2: '#3b82f6',

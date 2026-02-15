@@ -11,7 +11,7 @@ import { HighestLevelsBarChart } from './components/Charts/HighestLevelsBarChart
 import { SafetyDonut } from './components/Charts/SafetyDonut';
 import { IoTStatusGrid } from './components/IoTStatusGrid';
 import { getSafetyStatus } from './services/dataService';
-import { SensorReading, IoTSystemState, GasType, GAS_COLORS } from './types';
+import { SensorReading, IoTSystemState, GasType, GAS_COLORS, SensorHeartbeats } from './types';
 
 // Firebase Project Configuration
 const firebaseConfig = {
@@ -29,6 +29,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 // Initialize Realtime Database with explicit URL for asia-southeast1 region
 const database = getDatabase(app, "https://solanirad-analytics-dashboard-default-rtdb.asia-southeast1.firebasedatabase.app/");
+
+// Helper to safely parse numbers and prevent NaN
+const safeNumber = (val: any): number => {
+  if (val === null || val === undefined) return 0;
+  const num = Number(val);
+  return isNaN(num) ? 0 : num;
+};
 
 const App: React.FC = () => {
   // Analytic Data State (for charts)
@@ -57,11 +64,22 @@ const App: React.FC = () => {
     battery: 0
   });
 
+  // Independent Sensor Heartbeats
+  const [sensorHeartbeats, setSensorHeartbeats] = useState<SensorHeartbeats>({
+    esp32: 0,
+    mq137: 0,
+    mq135: 0,
+    scd41: 0,
+    loadcell: 0,
+    servo: 0,
+    uvc: 0
+  });
+
   const [history, setHistory] = useState<SensorReading[]>([]);
   const [filter, setFilter] = useState<GasType>('All');
   const [connected, setConnected] = useState(false);
   
-  // Local state to track current time for heartbeat calculation
+  // Local state to track current time for heartbeat calculation (updates every second)
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -71,27 +89,61 @@ const App: React.FC = () => {
       const val = snapshot.val();
       if (val) {
         setConnected(true);
-        const timestampDate = new Date();
+        const arrivalTime = Date.now();
         
+        const timestampDate = new Date();
         // Format: MM-DD-YYYY HH:mm:ss
         const pad = (n: number) => n.toString().padStart(2, '0');
         const timestamp = `${pad(timestampDate.getMonth() + 1)}-${pad(timestampDate.getDate())}-${timestampDate.getFullYear()} ${pad(timestampDate.getHours())}:${pad(timestampDate.getMinutes())}:${pad(timestampDate.getSeconds())}`;
         
+        // Update Heartbeats if keys exist in payload
+        // Checks both hyphenated (legacy/alt) and non-hyphenated keys
+        const hasMq137 = val['mq-137'] !== undefined || val.mq137 !== undefined;
+        const hasMq135 = val['mq-135'] !== undefined || val.mq135 !== undefined;
+        const hasLoadcell = val.loadcell !== undefined;
+
+        setSensorHeartbeats(prev => ({
+          esp32: arrivalTime, // Always update ESP32 if we get data
+          mq137: hasMq137 ? arrivalTime : prev.mq137,
+          mq135: hasMq135 ? arrivalTime : prev.mq135,
+          scd41: val.scd41 !== undefined ? arrivalTime : prev.scd41,
+          loadcell: hasLoadcell ? arrivalTime : prev.loadcell,
+          servo: val.servo !== undefined ? arrivalTime : prev.servo,
+          uvc: val.uvc !== undefined ? arrivalTime : prev.uvc
+        }));
+
+        // RESOLVE SENSOR VALUES
+        // Extracts data from { value: number } structure or direct number
+        const resolveSensorValue = (entry: any): number => {
+            if (entry === null || entry === undefined) return 0;
+            // If it's an object with a 'value' property (e.g. { value: 12.5 })
+            if (typeof entry === 'object' && 'value' in entry) {
+                return safeNumber(entry.value);
+            }
+            // Fallback for flat structure
+            return safeNumber(entry);
+        };
+
+        // Access raw nodes (handling potential key variations)
+        const mq137Raw = val['mq-137'] ?? val.mq137;
+        const mq135Raw = val['mq-135'] ?? val.mq135;
+        const loadcellRaw = val.loadcell;
+
         // Update System State (Raw Data)
         const newSystemState: IoTSystemState = {
           esp32_status: val.esp32_status ?? false,
-          esp32_last_update: val.esp32_last_update ?? 0,
-          mq137: Number(val.mq137 ?? 0),
-          mq135: Number(val.mq135 ?? 0),
+          esp32_last_update: safeNumber(val.esp32_last_update),
+          mq137: resolveSensorValue(mq137Raw),    // NH3
+          mq135: resolveSensorValue(mq135Raw),    // VOC
           scd41: {
-            co2: Number(val.scd41?.co2 ?? 0),
-            temperature: Number(val.scd41?.temperature ?? 0),
-            humidity: Number(val.scd41?.humidity ?? 0)
+            co2: safeNumber(val.scd41?.co2),
+            temperature: safeNumber(val.scd41?.temperature),
+            humidity: safeNumber(val.scd41?.humidity)
           },
-          loadcell: Number(val.loadcell ?? 0),
+          loadcell: resolveSensorValue(loadcellRaw), // Weight
           servo: Boolean(val.servo),
           uvc: Boolean(val.uvc),
-          battery: Number(val.battery ?? 0)
+          battery: safeNumber(val.battery)
         };
         setSystemState(newSystemState);
 
@@ -135,12 +187,15 @@ const App: React.FC = () => {
 
   const safetyStatuses = getSafetyStatus(data);
 
-  // Check if ESP32 is online based on heartbeat (last update within 15 seconds)
-  // Using 15s buffer to allow for slight network delays
-  const isEspOnline = (Math.floor(now / 1000) - systemState.esp32_last_update) <= 15;
+  // Connection Logic: ESP32 status based on independent heartbeat
+  // This is used for the global indicator in the header, while grid uses granular heartbeats
+  const isEspOnline = (now - sensorHeartbeats.esp32) < 15000;
 
   // Helper to determine display value
-  const getDisplayValue = (val: number) => isEspOnline ? val : 'Disconnected';
+  const getDisplayValue = (val: number, sensorKey: keyof SensorHeartbeats) => {
+     const isSensorOnline = (now - sensorHeartbeats[sensorKey]) < 15000;
+     return isSensorOnline ? val : 'Disconnected';
+  };
 
   // Dashboard Click Logic
   const handleReset = () => {
@@ -175,17 +230,22 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* SECTION 1: IOT HARDWARE STATUS GRID */}
-        <IoTStatusGrid systemData={systemState} onReset={handleReset} />
+        {/* SECTION 1: IOT HARDWARE STATUS GRID - Independent Sensors */}
+        <IoTStatusGrid 
+          systemData={systemState} 
+          heartbeats={sensorHeartbeats}
+          now={now}
+          onReset={handleReset} 
+        />
 
         {/* SECTION 2: ANALYTIC KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <KpiCard title="NH₃ Level" subtitle="Ammonia" value={getDisplayValue(data.nh3)} unit="ppm" color={GAS_COLORS.nh3} />
-          <KpiCard title="CO₂ Level" subtitle="Carbon Dioxide" value={getDisplayValue(data.co2)} unit="ppm" color={GAS_COLORS.co2} />
-          <KpiCard title="VOC LEVEL" subtitle="volatile organic compounds" value={getDisplayValue(data.nox)} unit="ppb" color={GAS_COLORS.nox} />
-          <KpiCard title="Load Weight" subtitle="Total Load" value={getDisplayValue(data.weight)} unit="kg" color={GAS_COLORS.so2} />
-          <KpiCard title="System Temp" subtitle="Internal" value={getDisplayValue(data.temperature)} unit="°C" color={GAS_COLORS.env} />
-          <KpiCard title="Humidity" subtitle="Relative Humidity" value={getDisplayValue(data.humidity)} unit="%" color="#a855f7" />
+          <KpiCard title="NH₃ Level" subtitle="Ammonia" value={getDisplayValue(data.nh3, 'mq137')} unit="ppm" color={GAS_COLORS.nh3} />
+          <KpiCard title="CO₂ Level" subtitle="Carbon Dioxide" value={getDisplayValue(data.co2, 'scd41')} unit="ppm" color={GAS_COLORS.co2} />
+          <KpiCard title="VOC LEVEL" subtitle="volatile organic compounds" value={getDisplayValue(data.nox, 'mq135')} unit="ppb" color={GAS_COLORS.nox} />
+          <KpiCard title="Load Weight" subtitle="Total Load" value={getDisplayValue(data.weight, 'loadcell')} unit="kg" color={GAS_COLORS.so2} />
+          <KpiCard title="System Temp" subtitle="Internal" value={getDisplayValue(data.temperature, 'scd41')} unit="°C" color={GAS_COLORS.env} />
+          <KpiCard title="Humidity" subtitle="Relative Humidity" value={getDisplayValue(data.humidity, 'scd41')} unit="%" color="#a855f7" />
         </div>
 
         {/* SECTION 3: MAIN ANALYTICS CHARTS - UNIFORM 2x2 GRID */}
