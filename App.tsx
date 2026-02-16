@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set } from 'firebase/database';
+import * as firebaseDatabase from 'firebase/database';
 import { Header } from './components/Header';
 import { KpiCard } from './components/KpiCard';
 import { GasConcentrationPie } from './components/Charts/GasConcentrationPie';
@@ -12,6 +12,9 @@ import { SafetyDonut } from './components/Charts/SafetyDonut';
 import { IoTStatusGrid } from './components/IoTStatusGrid';
 import { getSafetyStatus } from './services/dataService';
 import { SensorReading, IoTSystemState, GasType, GAS_COLORS, SensorHeartbeats } from './types';
+
+// Workaround for firebase/database type definition issues in some environments
+const { getDatabase, ref, onValue, set } = firebaseDatabase as any;
 
 // Firebase Project Configuration
 const firebaseConfig = {
@@ -29,6 +32,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 // Initialize Realtime Database with explicit URL for asia-southeast1 region
 const database = getDatabase(app, "https://solanirad-analytics-dashboard-default-rtdb.asia-southeast1.firebasedatabase.app/");
+
+// STALE DATA THRESHOLD (15 Seconds)
+const TIMEOUT_MS = 15000;
 
 // Helper to safely parse numbers and prevent NaN
 const safeNumber = (val: any): number => {
@@ -64,7 +70,7 @@ const App: React.FC = () => {
     battery: 0
   });
 
-  // Independent Sensor Heartbeats
+  // Independent Sensor Heartbeats (Stores SERVER timestamps)
   const [sensorHeartbeats, setSensorHeartbeats] = useState<SensorHeartbeats>({
     esp32: 0,
     mq137: 0,
@@ -79,75 +85,96 @@ const App: React.FC = () => {
   const [filter, setFilter] = useState<GasType>('All');
   const [connected, setConnected] = useState(false);
   
-  // Local state to track current time for heartbeat calculation (updates every second)
+  // Local state to track current time for stale data calculation (updates every second)
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     // 1. Firebase Listener
     const iotRef = ref(database, 'iot_system');
-    const unsubscribe = onValue(iotRef, (snapshot) => {
+    const unsubscribe = onValue(iotRef, (snapshot: any) => {
       const val = snapshot.val();
       if (val) {
         setConnected(true);
-        const arrivalTime = Date.now();
         
         const timestampDate = new Date();
         // Format: MM-DD-YYYY HH:mm:ss
         const pad = (n: number) => n.toString().padStart(2, '0');
         const timestamp = `${pad(timestampDate.getMonth() + 1)}-${pad(timestampDate.getDate())}-${timestampDate.getFullYear()} ${pad(timestampDate.getHours())}:${pad(timestampDate.getMinutes())}:${pad(timestampDate.getSeconds())}`;
         
-        // Update Heartbeats if keys exist in payload
-        // Checks both hyphenated (legacy/alt) and non-hyphenated keys
-        const hasMq137 = val['mq-137'] !== undefined || val.mq137 !== undefined;
-        const hasMq135 = val['mq-135'] !== undefined || val.mq135 !== undefined;
-        const hasLoadcell = val.loadcell !== undefined;
-
-        setSensorHeartbeats(prev => ({
-          esp32: arrivalTime, // Always update ESP32 if we get data
-          mq137: hasMq137 ? arrivalTime : prev.mq137,
-          mq135: hasMq135 ? arrivalTime : prev.mq135,
-          scd41: val.scd41 !== undefined ? arrivalTime : prev.scd41,
-          loadcell: hasLoadcell ? arrivalTime : prev.loadcell,
-          servo: val.servo !== undefined ? arrivalTime : prev.servo,
-          uvc: val.uvc !== undefined ? arrivalTime : prev.uvc
-        }));
-
-        // RESOLVE SENSOR VALUES
-        // Extracts data from { value: number } structure or direct number
-        const resolveSensorValue = (entry: any): number => {
-            if (entry === null || entry === undefined) return 0;
-            // If it's an object with a 'value' property (e.g. { value: 12.5 })
-            if (typeof entry === 'object' && 'value' in entry) {
-                return safeNumber(entry.value);
-            }
-            // Fallback for flat structure
-            return safeNumber(entry);
+        // --- HELPER: Resolve Sensor Node ---
+        // Expects structure: { value: number, lastUpdated: number }
+        // Returns { value, lastUpdated }
+        const extractSensorNode = (node: any) => {
+          if (!node) return { value: 0, lastUpdated: 0 };
+          
+          // Strict check for object structure
+          if (typeof node === 'object') {
+            return {
+              value: safeNumber(node.value),
+              lastUpdated: safeNumber(node.lastUpdated) // Default 0 means "Offline" if missing
+            };
+          }
+          
+          // Fallback for legacy (flat number) - Assume stale (lastUpdated = 0) to force DB update
+          // This strictly enforces the requirement: "Never trust static values."
+          return {
+            value: safeNumber(node),
+            lastUpdated: 0 
+          };
         };
 
-        // Access raw nodes (handling potential key variations)
+        // --- PARSE SENSORS INDEPENDENTLY ---
+        
+        // 1. MQ-137 (NH3)
+        // Check for 'mq-137' (legacy) or 'mq137' keys
         const mq137Raw = val['mq-137'] ?? val.mq137;
-        const mq135Raw = val['mq-135'] ?? val.mq135;
-        const loadcellRaw = val.loadcell;
+        const mq137Data = extractSensorNode(mq137Raw);
 
-        // Update System State (Raw Data)
+        // 2. MQ-135 (VOC)
+        const mq135Raw = val['mq-135'] ?? val.mq135;
+        const mq135Data = extractSensorNode(mq135Raw);
+
+        // 3. Load Cell (Weight)
+        const loadcellData = extractSensorNode(val.loadcell);
+
+        // 4. SCD41 (CO2, Temp, Hum)
+        // SCD41 usually has sub-keys. We look for a 'lastUpdated' at the scd41 root.
+        const scd41Node = val.scd41 || {};
+        const scd41Timestamp = safeNumber(scd41Node.lastUpdated); 
+        
+        // 5. ESP32 Heartbeat
+        const espTimestamp = safeNumber(val.esp32_last_update);
+
+        // --- UPDATE INDEPENDENT HEARTBEATS (SERVER TIME) ---
+        setSensorHeartbeats({
+          esp32: espTimestamp,
+          mq137: mq137Data.lastUpdated,
+          mq135: mq135Data.lastUpdated,
+          scd41: scd41Timestamp,
+          loadcell: loadcellData.lastUpdated,
+          servo: espTimestamp, // Servo state usually tied to ESP main loop
+          uvc: espTimestamp    // UVC state usually tied to ESP main loop
+        });
+
+        // --- UPDATE SYSTEM VALUES ---
         const newSystemState: IoTSystemState = {
           esp32_status: val.esp32_status ?? false,
-          esp32_last_update: safeNumber(val.esp32_last_update),
-          mq137: resolveSensorValue(mq137Raw),    // NH3
-          mq135: resolveSensorValue(mq135Raw),    // VOC
+          esp32_last_update: espTimestamp,
+          mq137: mq137Data.value,
+          mq135: mq135Data.value,
           scd41: {
-            co2: safeNumber(val.scd41?.co2),
-            temperature: safeNumber(val.scd41?.temperature),
-            humidity: safeNumber(val.scd41?.humidity)
+            co2: safeNumber(scd41Node.co2),
+            temperature: safeNumber(scd41Node.temperature),
+            humidity: safeNumber(scd41Node.humidity)
           },
-          loadcell: resolveSensorValue(loadcellRaw), // Weight
+          loadcell: loadcellData.value,
           servo: Boolean(val.servo),
           uvc: Boolean(val.uvc),
           battery: safeNumber(val.battery)
         };
         setSystemState(newSystemState);
 
-        // Map Raw Data to Analytics Model
+        // --- MAP TO ANALYTICS MODEL ---
         const newReading: SensorReading = {
           id: timestampDate.getTime().toString(),
           timestamp: timestamp,
@@ -168,13 +195,13 @@ const App: React.FC = () => {
       } else {
         console.log("Connected to Firebase, but 'iot_system' node is empty or missing.");
       }
-    }, (error) => {
+    }, (error: any) => {
       console.error("Firebase Read Error:", error);
       setConnected(false);
     });
 
-    // 2. Heartbeat Interval
-    // Updates 'now' every second to check for stale data (disconnection)
+    // 2. Refresh Timer
+    // Updates 'now' every second to trigger re-renders for stale data checks
     const timer = setInterval(() => {
       setNow(Date.now());
     }, 1000);
@@ -187,14 +214,20 @@ const App: React.FC = () => {
 
   const safetyStatuses = getSafetyStatus(data);
 
-  // Connection Logic: ESP32 status based on independent heartbeat
-  // This is used for the global indicator in the header, while grid uses granular heartbeats
-  const isEspOnline = (now - sensorHeartbeats.esp32) < 15000;
+  // --- STALE DATA LOGIC ---
+  // Calculates online status based on (Current Time - Server LastUpdated Time)
+  const isOnline = (serverTimestamp: number) => {
+    // If serverTimestamp is 0 or undefined, it's definitely offline
+    if (!serverTimestamp) return false;
+    return (now - serverTimestamp) < TIMEOUT_MS;
+  };
 
-  // Helper to determine display value
+  const isEspOnline = isOnline(sensorHeartbeats.esp32);
+
+  // Helper to determine display value based on INDEPENDENT sensor status
   const getDisplayValue = (val: number, sensorKey: keyof SensorHeartbeats) => {
-     const isSensorOnline = (now - sensorHeartbeats[sensorKey]) < 15000;
-     return isSensorOnline ? val : 'Disconnected';
+     const online = isOnline(sensorHeartbeats[sensorKey]);
+     return online ? val : 'Disconnected';
   };
 
   // Dashboard Click Logic
@@ -208,7 +241,7 @@ const App: React.FC = () => {
         .then(() => {
            alert("Reboot Signal Sent. The ESP32 will restart and reset the signal.");
         })
-        .catch(err => {
+        .catch((err: any) => {
             console.error("Cloud sync failed:", err);
             alert("Error sending reboot signal. Check connection.");
         });
@@ -238,7 +271,7 @@ const App: React.FC = () => {
           onReset={handleReset} 
         />
 
-        {/* SECTION 2: ANALYTIC KPIs */}
+        {/* SECTION 2: ANALYTIC KPIs - Independent Data Binding */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <KpiCard title="NH₃ Level" subtitle="Ammonia" value={getDisplayValue(data.nh3, 'mq137')} unit="ppm" color={GAS_COLORS.nh3} />
           <KpiCard title="CO₂ Level" subtitle="Carbon Dioxide" value={getDisplayValue(data.co2, 'scd41')} unit="ppm" color={GAS_COLORS.co2} />
